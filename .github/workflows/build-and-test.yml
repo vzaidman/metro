@@ -1,0 +1,61 @@
+name: facebook/metro/build-and-test
+on:
+  workflow_call:
+  pull_request:
+    types: [synchronize]
+
+# head_ref is per PR, so this ensures that updaing a PR
+# will cancel the previous run of the workflow
+concurrency:
+  group: "build-and-test-${{ github.head_ref }}"
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  run-js-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/yarn-install
+      - run: echo ${{ github.ref }}
+      - run: yarn typecheck
+      - run: yarn typecheck-ts
+      - run: yarn lint
+      - run: yarn test-smoke
+
+  test-with-coverage:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: ./.github/actions/yarn-install
+    - run: yarn test-coverage
+    - name: Download Codecov Uploader
+      run: "./.github/scripts/install_codecov.sh"
+    - name: Upload coverage results
+      run: "./codecov -t ${{ secrets.CODECOV_TOKEN }} -f ./coverage/coverage-final.json"
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        use-min-supported-version: [true, false]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: ./.github/actions/yarn-install
+      with:
+        use-min-supported-version: ${{ matrix.use-min-supported-version }}
+    - name: Run Jest tests
+      run: yarn jest --ci --maxWorkers 4 --reporters=default --reporters=jest-junit
+
+  test-windows:
+    if: startsWith(github.ref, 'refs/heads/windows/')
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: ./.github/actions/yarn-install
+    - name: Run Jest tests
+      run: yarn jest --ci --maxWorkers 4 --reporters=default --reporters=jest-junit
+# todo: how many max workers are best performing?
