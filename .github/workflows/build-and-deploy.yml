@@ -1,0 +1,36 @@
+name: facebook/metro/build-and-deploy
+on:
+  push:
+    branches:
+      - main
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-and-test:
+    uses: ./.github/workflows/build-and-test.yml
+    secrets: inherit
+
+  publish-to-npm:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: ./.github/actions/yarn-install
+      with:
+        use-min-supported-version: true
+    - name: Check Tag Format
+      id: check_tag
+      run: |
+        if [[ $GITHUB_REF =~ ^refs/tags/v\d+(\.\d+){2}(-.*)?$ ]]; then
+          echo "valid=true" >> $GITHUB_OUTPUT
+        else
+          echo "valid=false" >> $GITHUB_OUTPUT
+        fi
+    - run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> ~/.npmrc
+    - name: Infer dist-tag and run npm run publish
+      if: steps.check_tag.outputs.valid == 'true'
+      run: "./.github/scripts/publish.sh"
+    - run: rm ~/.npmrc
