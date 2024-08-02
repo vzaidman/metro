@@ -25,4 +25,4 @@ NPM_TAG="latest"
 [ "$TAG_ON_RELEASE_BRANCH" -eq 1 ] && NPM_TAG="${RELEASE_BRANCH%.x}-stable"
 echo "Publishing with --tag=$NPM_TAG"
 
-npm run publish --tag="$NPM_TAG"
+npm run publish --tag="$NPM_TAG" --dry-run

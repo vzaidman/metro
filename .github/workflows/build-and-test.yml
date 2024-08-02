@@ -2,7 +2,7 @@ name: facebook/metro/build-and-test
 on:
   workflow_call:
   pull_request:
-    types: [opened, synchronize]
+    types: synchronize
 
 # head_ref is per PR, so this ensures that updaing a PR
 # will cancel the previous run of the workflow
@@ -20,7 +20,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/yarn-install
-      - run: echo ${{ github.ref }}
       - run: yarn typecheck
       - run: yarn typecheck-ts
       - run: yarn lint
@@ -51,7 +50,7 @@ jobs:
       run: yarn jest --ci --maxWorkers 4 --reporters=default --reporters=jest-junit
 
   test-windows:
-    if: startsWith(github.ref, 'refs/heads/windows/')
+    if: startsWith(github.head_ref, 'windows/')
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
