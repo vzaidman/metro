@@ -2,7 +2,7 @@ name: facebook/metro/build-and-test
 on:
   workflow_call:
   pull_request:
-    types: [synchronize]
+    types: [opened, synchronize]
 
 # head_ref is per PR, so this ensures that updaing a PR
 # will cancel the previous run of the workflow
