@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/yarn-install
-      - run: echo ${{ github.ref }}
+      - run: echo ${{ github.ref_name }}
       - run: yarn typecheck
       - run: yarn typecheck-ts
       - run: yarn lint
