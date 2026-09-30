@@ -7,7 +7,6 @@ permissions:
 
 jobs:
   labeler:
-    if: github.repository == 'react/metro'
     runs-on: ubuntu-latest
     permissions:
       contents: read
