@@ -297,7 +297,7 @@ For example, for `import 'lodash'` in `/app/src/App.js`, Metro tries `/app/src/n
 
 Type: `string`
 
-The module used when Metro needs an empty module, e.g. when a package's `browser` field maps a file to `false`. Defaults to the empty module in `metro-runtime`. Only needs changing if Metro is installed outside your project.
+The module used when Metro needs an empty module, e.g. when a package's `browser` field maps a file to `false`. Defaults to `metro:runtime/modules/empty-module`, the empty module in the `metro-runtime` Metro itself depends on, through Metro's built-in [`metro:` scheme resolver](#schemeresolvers).
 
 #### `enableGlobalPackages`
 
@@ -321,7 +321,7 @@ Directories containing packages (like `node_modules`) to check after all `node_m
 
 Type: [`?CustomResolver`](./Resolution.md#resolverequest-customresolver)
 
-An optional function that overrides the default resolution algorithm, e.g. for aliases or custom protocols. See [Module Resolution](./Resolution.md).
+An optional function that overrides the default resolution algorithm, e.g. for aliases or custom protocols. It must delegate any specifiers it doesn't handle, including those in Metro's `metro:` scheme, such as the defaults for [`emptyModulePath`](#emptymodulepath) and [`asyncRequireModulePath`](#asyncrequiremodulepath-deprecated). See [Module Resolution](./Resolution.md).
 
 ```javascript
 resolveRequest: (context, moduleName, platform) => {
@@ -329,7 +329,7 @@ resolveRequest: (context, moduleName, platform) => {
     // Resolve to a file path, or throw if there is no resolution.
     return {filePath: 'path/to/file', type: 'sourceFile'};
   }
-  // Optionally, chain to the standard Metro resolver.
+  // Chain to the standard Metro resolver for anything not handled above.
   return context.resolveRequest(context, moduleName, platform);
 };
 ```
@@ -566,13 +566,13 @@ Transformer options control [transformation](./Concepts.md#transformation): how 
 
 Type: `string`
 
-The module providing the `asyncRequire` function, which implements [dynamic `import()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import) at runtime. Defaults to [`metro-runtime/src/modules/asyncRequire`](https://github.com/react/metro/blob/main/packages/metro-runtime/src/modules/asyncRequire.js).
+The module providing the `asyncRequire` function, which implements [dynamic `import()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import) at runtime. Defaults to [`metro:runtime/modules/asyncRequire`](https://github.com/react/metro/blob/main/packages/metro-runtime/src/modules/asyncRequire.js).
 
 Using a custom value for bundle splitting, as in older Metro versions, is deprecated in favor of the [`__loadBundleAsync`](https://github.com/react-native-community/discussions-and-proposals/blob/main/proposals/0605-lazy-bundling.md#__loadbundleasync-in-metro) API.
 
 :::note
 
-The module is [resolved](./Resolution.md) relative to each module containing an `import()` call, including modules in `node_modules`, so it must be resolvable from all of them. With the default value, a compatible `metro-runtime` must be installed in the project's `node_modules`. Use `metro:runtime/modules/asyncRequire` to resolve, from any importer, the `metro-runtime` Metro itself depends on, through Metro's built-in [`metro:` scheme resolver](#schemeresolvers).
+The module is [resolved](./Resolution.md) relative to each module containing an `import()` call, including modules in `node_modules`, so it must be resolvable from all of them. The default value resolves, from any importer, to the `metro-runtime` Metro itself depends on, through Metro's built-in [`metro:` scheme resolver](#schemeresolvers).
 
 :::
 
@@ -658,7 +658,9 @@ A file size threshold (in bytes) above which some expensive optimizations are sk
 
 Type: `string`
 
-A prefix for the global names used by Metro's module system, e.g. with `'app1'`, each module is wrapped in `app1__d(...)` instead of `__d(...)`. Defaults to `''`.
+A prefix for the global names used by Metro's module system, so that several bundles with different prefixes can share one JavaScript realm. E.g. with `'app1'`, each module is wrapped in `app1__d(...)` instead of `__d(...)`, and the bundle runs its entry point with `app1__r(...)`. Defaults to `''`.
+
+The prefix applies to `__d`, `__r`, `__c` and `__registerSegment`, to `__loadBundleAsync`, and in development to `__accept`, `__requireCycleIgnorePatterns`, `__unstable_forceFullRefreshPatterns`, `__ReactRefresh` and `__SYSTRACE`. Code that calls any of these by name, such as a custom [`getRunModuleStatement`](#getrunmodulestatement) or native code that calls `__r`, must apply the same prefix. Each bundle also declares its prefix as the global `__METRO_GLOBAL_PREFIX__`.
 
 #### `allowOptionalDependencies`
 
@@ -754,7 +756,7 @@ Serializer options control [serialization](./Concepts.md#serialization): how tra
 
 Type: `(moduleId: number | string, globalPrefix: string) => string`
 
-Formats the require statements appended to the end of the bundle: one for each module from [`getModulesRunBeforeMainModule`](#getmodulesrunbeforemainmodule) that is in the bundle, then one for the [entry point](./Concepts.md#entry-point). Defaults to `` `__r(${JSON.stringify(moduleId)});` ``, e.g. `__r(42);` for module ID `42`.
+Formats the require statements appended to the end of the bundle: one for each module from [`getModulesRunBeforeMainModule`](#getmodulesrunbeforemainmodule) that is in the bundle, then one for the [entry point](./Concepts.md#entry-point). Defaults to `` `${globalPrefix}__r(${JSON.stringify(moduleId)});` ``, e.g. `__r(42);` for module ID `42` with the default [`globalPrefix`](#globalprefix).
 
 #### `createModuleIdFactory`
 
