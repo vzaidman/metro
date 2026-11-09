@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkmetro_website=self.webpackChunkmetro_website||[]).push([[4520],{61959(e){e.exports=JSON.parse('{"metadata":{"permalink":"/metro/main/blog","page":1,"postsPerPage":10,"totalPages":1,"totalCount":0,"blogDescription":"Blog","blogTitle":"Blog"}}')}}]);
