@@ -9,7 +9,7 @@ _Bundling_ turns your app's source files into a _bundle_: the JavaScript your ap
 
 You can get a bundle from Metro:
 
-- **From the development server**, by requesting the entry point's path with `.bundle` instead of `.js`, e.g. `http://localhost:8081/index.bundle?platform=ios`. This is how React Native apps load their code in development. See [URL and bundle request](./GettingStarted.md#url-and-bundle-request).
+- **From the development server**, by requesting the entry point's path with `.bundle` instead of `.js`, e.g. `http://localhost:8081/index.bundle?platform=ios`. This is how React Native apps load their code in development. See [Bundle URLs](#bundle-urls).
 - **As build output**, with `npx react-native bundle` for React Native release builds, [`metro build`](./CLI.md#build-entry), or [`runBuild`](./API.md#async-runbuildconfig-options).
 
 To build a bundle, Metro:
@@ -21,6 +21,31 @@ To build a bundle, Metro:
    - [Scripts](#scripts): Metro's module system and polyfills.
    - Each [module](#modules), wrapped in a `__d` call.
    - Calls that run the modules from [`serializer.getModulesRunBeforeMainModule`](./Configuration.md#getmodulesrunbeforemainmodule), then the entry point.
+
+## Bundle URLs
+
+Any JS file in the [project root](./Concepts.md#project-root-and-watch-folders) can be the [entry point](./Concepts.md#entry-point) of a bundle served by the development server. To request a bundle, use the file's path relative to the project root (or [`server.unstable_serverRoot`](./Configuration.md#unstable_serverroot-experimental), if set), with `.js` changed to `.bundle`.
+
+Pass build options as query parameters. All are optional. Boolean ones take `true` or `false` and default to `false` unless noted. `dev`, `platform` and `minify` correspond to the bundle's settings of the same name.
+
+- `dev`: Build a [development bundle](./Concepts.md#development-and-production-builds). Defaults to `true`.
+- `platform`: The [platform](./Concepts.md#platform) requesting the bundle (e.g. `ios`). Defaults to the platform suffix of the requested file name, if any (e.g. `ios` for `index.ios.bundle`).
+- `minify`: Minify the code.
+- `excludeSource`: Leave the source code out of the source map, e.g. `/index.map?platform=ios&dev=true&excludeSource=true` returns a source map without `sourcesContent`.
+- `inlineSourceMap`: Append the source map to the bundle as a base64 `data:` URL.
+- `lazy`: Leave modules loaded with [`import()`](./ModuleAPI.md#import-dynamic-import) out of the bundle and load them on demand.
+- `modulesOnly`: Leave out Metro's runtime and polyfills, serving only the modules.
+- `runModule`: End the bundle with the statements that run the entry point. Defaults to `true`.
+- `shallow`: Include only the entry module, without its dependencies.
+- `sourcePaths`: Reference source files in the source map as absolute file paths (`absolute`) or URL paths on the server (`url-server`). Defaults to `absolute`.
+- `unstable_transformProfile`: Passed to the [Babel transformer](./Configuration.md#babeltransformerpath) to target a specific JavaScript engine (`default`, `hermes-stable` or `hermes-canary`). Defaults to `default`.
+- `resolver.<key>` and `transform.<key>`: [Custom resolver options](./Resolution.md#customresolveroptions-string-mixed) and custom transform options, e.g. `transform.foo=bar` passes `{foo: 'bar'}` to the transformer.
+
+For example, `http://localhost:8081/foo/bar/baz.bundle?dev=true&platform=ios` builds a development bundle for iOS from `foo/bar/baz.js`.
+
+### Source maps
+
+Metro builds a source map for each bundle. To request it, use the bundle's URL with `.map` instead of `.bundle` and the same query parameters, or the source map won't match the bundle. For example, the source map of `http://localhost:8081/index.bundle?platform=ios&dev=true` is `http://localhost:8081/index.map?platform=ios&dev=true`, which the bundle references with a `//# sourceMappingURL=` comment. This only works when `inlineSourceMap` is `false`. See [Source Map Format](./SourceMapFormat.md) for Metro's extensions to the format.
 
 ## Modules
 

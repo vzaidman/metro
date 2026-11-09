@@ -5,7 +5,7 @@ title: Bundling API
 
 Metro's JavaScript API lets you build a bundle that a React Native app can load offline at startup, start a development server that React Native apps connect to during development to receive the latest changes and hot reloads, or integrate such a server into an existing Node.js server.
 
-In a React Native app, `npx react-native start` already calls [`runServer`](#async-runserverconfig-options) and `npx react-native bundle` already calls [`runBuild`](#async-runbuildconfig-options). You only need this API if your own tooling does this directly. For a guided introduction, see [Getting Started](./GettingStarted.md#running-programmatically).
+In a React Native app, `npx react-native start` already calls [`runServer`](#async-runserverconfig-options) and `npx react-native bundle` already calls [`runBuild`](#async-runbuildconfig-options). You only need this API if your own tooling does this directly. For an overview, see [Getting Started](./GettingStarted.md#running-programmatically).
 
 ## Quick Start
 
@@ -46,7 +46,7 @@ All examples assume `const Metro = require('metro');`.
 
 ## Reference
 
-The `config` object accepted by the functions below is the [Metro configuration](./Configuration.md) exported by your `metro.config.js` file.
+The `config` below is a _resolved_ [Metro configuration](./Configuration.md#partial-and-resolved-configs): the result of [`loadConfig`](#loadconfigoptions-defaultconfigoverrides), with defaults filled in. `runMetro` and `buildGraph` also accept a partial config and merge defaults for you.
 
 ### `loadConfig(<options>, <defaultConfigOverrides>)`
 
@@ -70,9 +70,30 @@ For example, `Metro.loadConfig({port: 8082})` loads your config with `server.por
 
 The returned configuration is normalized and merged with Metro's defaults. `defaultConfigOverrides` is applied to the defaults before your config is merged in, e.g. `Metro.loadConfig({}, {resolver: {sourceExts: ['js', 'ts']}})` uses `['js', 'ts']` unless your config sets `resolver.sourceExts` itself. A config file that exports a function receives these modified defaults as its argument.
 
+### `resolveConfig(<filePath>, <cwd>)`
+
+Locates the config file, as in `require.resolve` — it does not return a [resolved config](./Configuration.md#partial-and-resolved-configs). It searches from `cwd` upward unless `filePath` is given, loads the file, and resolves to `{filepath, isEmpty, config}` with `config` exactly as exported (`{}` and `isEmpty: true` if there is none). No defaults are merged; for a runnable config, use [`loadConfig`](#loadconfigoptions-defaultconfigoverrides). Mainly for tooling that needs `filepath`, e.g. [`metro serve`](./CLI.md#serve) watches it to restart on config changes.
+
 ### `async runMetro(config, <options>)`
 
-Creates and returns a Metro server without starting an HTTP server. Use its `processRequest` method as a request handler or middleware in your own server (see [Getting Started](./GettingStarted.md#method-runmetroconfig)).
+Creates and returns a Metro server without starting an HTTP server. Pass its `processRequest` method to your own HTTP(S) server. Like Express middleware, `processRequest` calls its third argument when Metro can't handle a request, so you can combine it with your own request handling:
+
+```js
+const http = require('http');
+
+const metroServer = await Metro.runMetro(config);
+http
+  .createServer((req, res) => {
+    metroServer.processRequest(req, res, error => {
+      // Metro doesn't serve this URL, or handling it failed
+      res.statusCode = error ? 500 : 404;
+      res.end();
+    });
+  })
+  .listen(8081);
+```
+
+With [Express](http://expressjs.com/), pass it directly as middleware: `app.use(metroServer.processRequest.bind(metroServer))`.
 
 Prefer [`createConnectMiddleware`](#createconnectmiddlewareconfig-options) if you also want your config's middleware ([`server.unstable_middleware`](./Configuration.md#unstable_middleware-experimental) and [`server.unstable_priorityMiddleware`](./Configuration.md#unstable_prioritymiddleware-experimental)) and Fast Refresh support.
 
@@ -111,7 +132,7 @@ Builds a single bundle for `entry`, like [`metro build`](./CLI.md#build-entry). 
 
 ### `async runServer(config, <options>)`
 
-Starts a full Metro HTTP development server, like [`metro serve`](./CLI.md#serve). It listens on `host` and [`server.port`](./Configuration.md#port) and serves bundles for any [entry point](./Concepts.md#entry-point) on request (see [URL and bundle request](./GettingStarted.md#url-and-bundle-request)). Resolves to `{httpServer}`, the Node.js HTTP(S) server, which uses HTTPS if `secureServerOptions` or [`server.tls`](./Configuration.md#tls) is set.
+Starts a full Metro HTTP development server, like [`metro serve`](./CLI.md#serve). It listens on `host` and [`server.port`](./Configuration.md#port) and serves bundles for any [entry point](./Concepts.md#entry-point) on request (see [Bundle URLs](./Bundling.md#bundle-urls)). Resolves to `{httpServer}`, the Node.js HTTP(S) server, which uses HTTPS if `secureServerOptions` or [`server.tls`](./Configuration.md#tls) is set.
 
 **Options:** `waitForBundler`, `hasReducedPerformance` and `watch` (see [`runMetro`](#async-runmetroconfig-options)), plus:
 
@@ -131,7 +152,20 @@ Starts a full Metro HTTP development server, like [`metro serve`](./CLI.md#serve
   });
   ```
 
-- `secureServerOptions` (Object): Options for Metro's HTTPS server; setting it enables HTTPS. See the [Node docs](https://nodejs.org/api/https.html#https_https_createserver_options_requestlistener) for valid options.
+- `secureServerOptions` (Object): Options for Metro's HTTPS server; setting it enables HTTPS. See the [Node docs](https://nodejs.org/api/https.html#https_https_createserver_options_requestlistener) for valid options. For example:
+
+  ```js
+  const fs = require('fs');
+
+  await Metro.runServer(config, {
+    secureServerOptions: {
+      ca: fs.readFileSync('path/to/ca'),
+      cert: fs.readFileSync('path/to/cert'),
+      key: fs.readFileSync('path/to/key'),
+    },
+  });
+  ```
+
 - `unstable_middleware` (Array): Middleware that runs after the config's [`server.unstable_middleware`](./Configuration.md#unstable_middleware-experimental). Takes the same shape.
 - `unstable_priorityMiddleware` (Array): Middleware that runs before the config's [`server.unstable_priorityMiddleware`](./Configuration.md#unstable_prioritymiddleware-experimental). Takes the same shape. Handlers must call `next()` for every request they don't fully handle, so Metro can serve bundles, source maps, assets and its other endpoints.
 - `unstable_onServerCreated` (Function): Called with Metro's server instance before the HTTP server starts listening, after the config's [`server.unstable_onServerCreated`](./Configuration.md#unstable_onservercreated-experimental).
@@ -139,9 +173,9 @@ Starts a full Metro HTTP development server, like [`metro serve`](./CLI.md#serve
 
 ### `createConnectMiddleware(config, <options>)`
 
-Creates a [Connect](https://github.com/senchalabs/connect) middleware that serves Metro's bundles, to add Metro to your own Express or Connect server (see the [Quick Start](#quick-start)). It handles the same requests as Metro's own server, for example:
+Creates a [Connect](https://github.com/senchalabs/connect) middleware that serves Metro's bundles, to add Metro to your own Express or Connect server. It handles the same requests as Metro's own server, for example:
 
-- `/index.bundle?platform=ios&dev=true`: The bundle for `index.js` (see [URL and bundle request](./GettingStarted.md#url-and-bundle-request)).
+- `/index.bundle?platform=ios&dev=true`: The bundle for `index.js` (see [Bundle URLs](./Bundling.md#bundle-urls)).
 - `/index.map?platform=ios&dev=true`: The source map for that bundle.
 - `/assets/src/images/logo@2x.png?platform=ios`: An asset.
 - `/symbolicate`: Symbolicates stack traces (see [Symbolicator Options](./Configuration.md#symbolicator-options)).
@@ -196,3 +230,23 @@ Registers Metro's [CLI commands](./CLI.md) on a [`yargs`](https://yargs.js.org/)
 
   attachMetroCli(cli, {dependencies: null}).argv;
   ```
+
+## Development server URLs
+
+Whichever entry point you use — [`runServer`](#async-runserverconfig-options), [`createConnectMiddleware`](#createconnectmiddlewareconfig-options) or `processRequest` from [`runMetro`](#async-runmetroconfig-options) — Metro handles the same URLs. Anything else is passed on to your own handlers. You will see these URLs in network logs, stack traces and debugger sources; they are served by Metro, not by your app.
+
+| URL                                    | Response                                                                                                                  |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `GET /<entry>.bundle?...`              | The [bundle](./Concepts.md) for that entry point. Query parameters are listed in [Bundle URLs](./Bundling.md#bundle-urls) |
+| `GET /<entry>.map?...`                 | The bundle's source map. Use the same query parameters as the bundle, or it will not match                                |
+| `GET /<entry>.assets?...`              | JSON list of the bundle's [asset data](./Assets.md)                                                                       |
+| `GET /assets/<path>`                   | One asset file, at the closest available scale, rounding up                                                               |
+| `POST /symbolicate`                    | Symbolicates the stack trace in the request body. See [Symbolicator Options](./Configuration.md#symbolicator-options)     |
+| WebSocket `/hot`                       | [Fast Refresh](./FastRefresh.md) updates. Only with `runServer`, or after `attachHmrServer`                               |
+| `GET /[metro-project]/<path>`          | A source file from [`projectRoot`](./Configuration.md#projectroot), for debuggers                                         |
+| `GET /[metro-watchFolders]/<n>/<path>` | A source file from [`watchFolders`](./Configuration.md#watchfolders) entry `n` (counting from 0)                          |
+| `DELETE /<entry>.bundle?...`           | Discards that bundle's in-memory [dependency graph](./Concepts.md#dependency-graph). Responds `204`                       |
+
+Source files are only served if Metro knows them (they are in its file map) and their extension is a source or asset extension; otherwise the response is `404`. A `404` on a `[metro-project]` or `[metro-watchFolders]` URL usually means the file is outside the watched directories, not that your routing is wrong.
+
+Bundle responses carry `Last-Modified`, plus `X-Metro-Delta-ID` (the graph revision the bundle was built from) and `X-Metro-Files-Changed-Count` (how many files changed in that rebuild). A request whose `If-Modified-Since` matches receives `304` with no body. Tooling can use these headers to tell a fresh rebuild from a cached one without downloading the bundle.
