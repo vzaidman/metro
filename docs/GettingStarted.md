@@ -228,3 +228,5 @@ module.exports.transform = ({filename, src, plugins}) =>
 ### Method `getCacheKey(options)`
 
 Optional. Receives `{projectRoot, enableBabelRCLookup}` and returns the transformer's cache key as a `string`, e.g. a hash of the Babel config files it reads. With multiple transformers, this lets Metro tie each transformed file to the transformer that produced it.
+
+<!-- TEST ONLY: link-website-preview -->
