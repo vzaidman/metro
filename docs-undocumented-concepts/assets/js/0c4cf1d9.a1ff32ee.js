@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkmetro_website=self.webpackChunkmetro_website||[]).push([[5809],{30430(e){e.exports=JSON.parse('{"metadata":{"permalink":"/metro/docs-undocumented-concepts/blog","page":1,"postsPerPage":10,"totalPages":1,"totalCount":0,"blogDescription":"Blog","blogTitle":"Blog"}}')}}]);
