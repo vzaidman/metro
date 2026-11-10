@@ -51,18 +51,7 @@ The platform a bundle is built for, e.g. `ios` or `android`. Metro uses it to pi
 
 ### Development and production builds
 
-Every bundle is built either for development or production, set by the `dev` option, e.g. `dev=true` in a [bundle URL](./Bundling.md#bundle-urls) or `--dev` for [`metro build`](./CLI.md#build-entry). Development builds support [Fast Refresh](#fast-refresh), keep module paths in the bundle for debugging, and warn about require cycles at runtime (see [`resolver.requireCycleIgnorePatterns`](./Configuration.md#requirecycleignorepatterns)).
-
-Metro's default transformer replaces React Native's `Platform.OS` and `Platform.select()` with the bundle's platform. In production builds, it also replaces `__DEV__` with `false` and `process.env.NODE_ENV` with `'production'`, then removes code these replacements make unreachable. For example, in a production iOS bundle:
-
-```js
-if (__DEV__) {
-  console.log('debug info'); // removed
-}
-const padding = Platform.select({ios: 12, android: 8}); // becomes `12`
-```
-
-Production builds are usually also minified, with [`transformer.minifierPath`](./Configuration.md#minifierpath).
+Every bundle is built either for development or production, set by the `dev` option, e.g. `dev=true` in a [bundle URL](./Bundling.md#bundle-urls) or `--dev` for [`metro build`](./CLI.md#build-entry). Development builds support [Fast Refresh](#fast-refresh) and warn about require cycles at runtime. Production builds replace `__DEV__` and other build constants with their values, drop the code that makes unreachable, and are usually minified with [`transformer.minifierPath`](./Configuration.md#minifierpath). See [Bundle globals](./ModuleAPI.md#bundle-globals).
 
 ### Project root and watch folders
 
