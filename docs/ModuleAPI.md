@@ -157,4 +157,13 @@ Every bundle starts by defining these globals for your code. They are plain writ
 | `__BUNDLE_START_TIME__`   | When the bundle started running, for startup timing                             |
 | `__METRO_GLOBAL_PREFIX__` | The bundle's [`globalPrefix`](./Configuration.md#globalprefix), `''` by default |
 
-In release builds, reads of `__DEV__` and `process.env.NODE_ENV` are replaced with their values during [transformation](./Concepts.md#transformation), so reassigning them at runtime has no effect there and checks like `if (__DEV__) { ... }` can be dropped when minified. See [Bundling](./Bundling.md#modules) for what else runs before your code.
+In production builds, Metro's default transformer replaces `__DEV__` with `false` and `process.env.NODE_ENV` with `'production'`, then removes code these replacements make unreachable, so reassigning them at runtime has no effect there. In every build, it also replaces React Native's `Platform.OS` and `Platform.select()` with the bundle's [platform](./Concepts.md#platform). For example, in a production iOS bundle:
+
+```js
+if (__DEV__) {
+  console.log('debug info'); // removed
+}
+const padding = Platform.select({ios: 12, android: 8}); // becomes `12`
+```
+
+See [Bundling](./Bundling.md#modules) for what else runs before your code.
