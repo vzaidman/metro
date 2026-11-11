@@ -49,7 +49,7 @@ Metro only reacts to changes it [watches](./Concepts.md#file-watching):
 
 To check the watcher itself, enable [`watcher.healthCheck`](./Configuration.md#healthcheckenabled): Metro periodically writes a file into your project and warns if it does not observe the change, which points at the watcher rather than your setup.
 
-If edits apply but the app always fully reloads, that is Fast Refresh, not watching: see [Full reloads](./FastRefresh.md#full-reloads).
+If edits apply but the app always fully reloads, that is Fast Refresh, not watching: see [When state is kept and when the app reloads](./FastRefresh.md#when-state-is-kept-and-when-the-app-reloads).
 
 ## Stale bundle
 

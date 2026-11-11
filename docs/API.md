@@ -46,7 +46,7 @@ All examples assume `const Metro = require('metro');`.
 
 ## Reference
 
-The `config` below is a _resolved_ [Metro configuration](./Configuration.md#partial-and-resolved-configs): the result of [`loadConfig`](#loadconfigoptions-defaultconfigoverrides), with defaults filled in. `runMetro` and `buildGraph` also accept a partial config and merge defaults for you.
+The `config` below is a [resolved config](./Configuration.md#partial-and-resolved-configs), as returned by [`loadConfig`](#loadconfigoptions-defaultconfigoverrides). `runMetro` and `buildGraph` also accept a partial config.
 
 ### `loadConfig(<options>, <defaultConfigOverrides>)`
 
@@ -72,7 +72,7 @@ The returned configuration is normalized and merged with Metro's defaults. `defa
 
 ### `resolveConfig(<filePath>, <cwd>)`
 
-Locates the config file, as in `require.resolve` — it does not return a [resolved config](./Configuration.md#partial-and-resolved-configs). It searches from `cwd` upward unless `filePath` is given, loads the file, and resolves to `{filepath, isEmpty, config}` with `config` exactly as exported (`{}` and `isEmpty: true` if there is none). No defaults are merged; for a runnable config, use [`loadConfig`](#loadconfigoptions-defaultconfigoverrides). Mainly for tooling that needs `filepath`, e.g. [`metro serve`](./CLI.md#serve) watches it to restart on config changes.
+Finds and loads the config file, without merging defaults. Resolves to `{filepath, isEmpty, config}`. To get a config for the functions below, use [`loadConfig`](#loadconfigoptions-defaultconfigoverrides).
 
 ### `async runMetro(config, <options>)`
 
@@ -239,7 +239,7 @@ Whichever entry point you use — [`runServer`](#async-runserverconfig-options),
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `GET /<entry>.bundle?...`              | The [bundle](./Concepts.md) for that entry point. Query parameters are listed in [Bundle URLs](./Bundling.md#bundle-urls) |
 | `GET /<entry>.map?...`                 | The bundle's source map. Use the same query parameters as the bundle, or it will not match                                |
-| `GET /<entry>.assets?...`              | JSON list of the bundle's [asset data](./Assets.md)                                                                       |
+| `GET /<entry>.assets?...`              | JSON list of the bundle's [asset data](./Bundling.md#assets)                                                              |
 | `GET /assets/<path>`                   | One asset file, at the closest available scale, rounding up                                                               |
 | `POST /symbolicate`                    | Symbolicates the stack trace in the request body. See [Symbolicator Options](./Configuration.md#symbolicator-options)     |
 | WebSocket `/hot`                       | [Fast Refresh](./FastRefresh.md) updates. Only with `runServer`, or after `attachHmrServer`                               |
