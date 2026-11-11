@@ -3,67 +3,66 @@ id: fast-refresh
 title: Fast Refresh
 ---
 
-During development, Metro sends code changes to running apps, and its runtime applies them without reloading the app. React Native builds [Fast Refresh](https://reactnative.dev/docs/fast-refresh) on this, using [React Refresh](https://github.com/facebook/react/tree/main/packages/react-refresh) to re-render the updated components while keeping their state.
+In development, when you save a file, Metro sends the change to your running app, which applies it without restarting. React Native calls this [Fast Refresh](https://reactnative.dev/docs/fast-refresh). When it can, the app keeps its state, e.g. the current screen and what you typed. Otherwise, it reloads. Fast Refresh only exists in [development builds](./Concepts.md#development-and-production-builds).
 
-This page describes Metro's part. Updates only apply to development bundles (`dev=true`).
+This page describes Metro's part. For what React treats as a component and how it keeps their state, see React Native's [Fast Refresh docs](https://reactnative.dev/docs/fast-refresh).
 
-## Detecting changes
+## What happens when you edit a file
 
-Metro's [file watcher](./Concepts.md#file-watching) reports files being added, changed or deleted in the [project root or watch folders](./Concepts.md#project-root-and-watch-folders).
+1. Metro's [file watcher](./Concepts.md#file-watching) notices the change.
+2. For each bundle a running app has loaded, Metro updates the bundle's [dependency graph](./Concepts.md#dependency-graph) and [transforms](./Concepts.md#transformation) the changed files.
+3. Metro sends the changed modules to the app over a WebSocket.
+4. The app runs the new code, either in place, keeping its state, or by reloading.
 
-## Updating the dependency graph
+If the change can't be bundled, e.g. because of a syntax error or a missing import, Metro sends the error instead. The app shows it and keeps running its previous code until you fix it. See [Reading bundling errors](./Troubleshooting.md#reading-bundling-errors).
 
-For each bundle that a running app has [registered](#delivering-updates), Metro updates the bundle's [dependency graph](./Concepts.md#dependency-graph) and [transforms](./Concepts.md#transformation) the changed modules.
+## When state is kept and when the app reloads
 
-## Delivering updates
+When a file changes, the app re-runs it. The files importing it still hold its old exports, so they re-run too, then the files importing them, and so on, until each import path reaches a _boundary_: a file that takes the update without the files importing it re-running. If an import path reaches the [entry point](./Concepts.md#entry-point) without passing a boundary, the app reloads and loses its state.
 
-Apps register with Metro by connecting to the server's `/hot` WebSocket and sending the full URL of each bundle they loaded from it, e.g. `http://localhost:8081/index.bundle?platform=ios&dev=true`. Metro first sends the changes made since the bundle was built, then an update after each change: the code of added and modified modules, and the IDs of deleted modules.
+A file is a boundary if either:
 
-If a change can't be bundled, e.g. because of a syntax error or a missing import, Metro sends the error instead, and the app keeps running its previous code. React Native displays the error.
-
-## Applying updates
-
-If a changed module hasn't run yet, Metro's runtime only replaces its code, which runs when the module is first required.
-
-If it has already run, re-running it alone isn't enough: the modules importing it still hold its old exports. So the runtime also re-runs those modules, then the modules importing them, and so on up the import chain, until each chain reaches a _boundary_. Modules re-run in dependency order, then React Refresh re-renders the updated components.
-
-### Boundaries
-
-A boundary is a module that accepts an update: the update stops there, and the modules importing it don't re-run. A module accepts an update in one of two ways:
-
-- **Automatically**, as a _React Refresh boundary_: with [React Refresh set up](#setting-up-fast-refresh), a module whose exports are all React components, none of them a getter. The modules importing it don't need to re-run, because they use its components through React, and React Refresh re-renders them with the new code. See React Native's [Fast Refresh docs](https://reactnative.dev/docs/fast-refresh) for what counts as a component.
-- **Manually**, as a _manual boundary_: a module that calls [`module.hot.accept()`](#modulehot) when it runs. With React Refresh, app and library developers rarely need this, only for a module that isn't a component but can safely re-run on its own, e.g. one that starts a timer and stops it on [`module.hot.dispose()`](#modulehot). Without React Refresh, it's the only way to avoid reloading the app, e.g. in the root module.
+- **It exports only React components.** This is a _React Refresh boundary_: React re-renders the components with the new code and keeps their state. A single other export, such as a constant, a helper or a hook, means it isn't one.
+- **It calls [`module.hot.accept()`](#modulehot).** This is a _manual boundary_.
 
 For example, with `App.js` importing `Header.js` and `Button.js`, which both import `theme.js`:
 
-- `Header.js` exports only a component, so it's a React Refresh boundary. Editing it re-runs just `Header.js`.
-- `theme.js` exports a color object, so it isn't a boundary. Editing it re-runs `theme.js`, then `Header.js` and `Button.js`. `App.js` doesn't re-run.
+- Editing `Header.js`, which exports only a component, re-runs just `Header.js`.
+- Editing `theme.js`, which exports a color object, re-runs `theme.js`, `Header.js` and `Button.js`. `App.js` doesn't re-run.
 
-:::note
+Metro checks a file's exports each time an update arrives, so there's nothing to declare. Unlike some bundlers, e.g. webpack's [React Refresh plugin](https://github.com/pmmmwh/react-refresh-webpack-plugin), Metro doesn't add `module.hot.accept()` calls to React Refresh boundaries. If an edit changes a boundary's exports, e.g. adds a non-component export or renames a component, the update continues to the files importing it, which must all be React Refresh boundaries, or the app reloads.
 
-Unlike some bundlers' React Refresh integrations (e.g. webpack's [React Refresh plugin](https://github.com/pmmmwh/react-refresh-webpack-plugin)), Metro doesn't add `module.hot.accept()` calls to React Refresh boundaries. Metro's runtime checks a module's exports when an update arrives, so the two kinds of boundaries behave differently:
+The app also reloads when:
 
-- After a React Refresh boundary re-runs, the runtime checks its new exports. If it no longer qualifies, or the names or kinds of its exports changed, the update continues to the modules importing it, which must all be React Refresh boundaries, or the app reloads. A manual boundary always stops the update.
-- Only manual boundaries run an `accept()` callback.
+- The update runs into a [require cycle](./Bundling.md#require-cycles).
+- The changed file matches [`resolver.unstable_forceFullRefreshPatterns`](./Configuration.md#unstable_forcefullrefreshpatterns-experimental).
 
-:::
+If re-running a file throws, the update stops, and the file keeps its previous exports until you fix the error.
 
-### Full reloads
+## `module.hot`
 
-The app reloads instead, losing its state, when:
+In development builds, `module.hot` lets a file handle updates itself. It's `undefined` in production builds, so check for it:
 
-- The update reaches the [entry point](./Concepts.md#entry-point) without passing a boundary.
-- The update runs into an import cycle.
-- A re-run React Refresh boundary no longer qualifies, and the modules importing it aren't all React Refresh boundaries.
-- The changed module matches [`resolver.unstable_forceFullRefreshPatterns`](./Configuration.md#unstable_forcefullrefreshpatterns-experimental).
+- `module.hot.accept(callback?)`: Makes the file a manual boundary. `callback` runs after the file re-runs.
+- `module.hot.dispose(callback?)`: `callback` runs before the file re-runs, to undo its side effects.
 
-If a re-run module throws, the module keeps its previous exports and the update stops, so the app keeps working until the error is fixed and another update arrives.
+```js
+const interval = setInterval(poll, 1000);
 
-## Setting up Fast Refresh
+if (module.hot) {
+  module.hot.dispose(() => clearInterval(interval));
+  module.hot.accept();
+}
+```
 
-React Native sets up Fast Refresh; see its [Fast Refresh docs](https://reactnative.dev/docs/fast-refresh). Other apps and frameworks bundled with Metro set it up in their development builds:
+With React Refresh, app and library developers rarely need this: only for a file that isn't a component but can safely re-run on its own, like the one above. Without React Refresh, it's the only way to avoid reloading the app, e.g. in the root file, which renders the app again when it re-runs.
 
-1. **Connect to Metro.** Create an `HMRClient` from `metro-runtime/modules/HMRClient` with the server's `/hot` WebSocket URL, register the loaded bundles, and call `enable()` to apply updates as they arrive. Its `error` event reports changes Metro couldn't bundle, and its `update-start` and `update-done` events report progress:
+## Using Fast Refresh outside React Native
+
+React Native sets up Fast Refresh for you. Other apps and frameworks bundled with Metro set it up in their development builds:
+
+1. **Serve updates.** [`runServer`](./API.md#async-runserverconfig-options) serves them on the `/hot` WebSocket. With [`createConnectMiddleware`](./API.md#createconnectmiddlewareconfig-options), call `attachHmrServer` on your HTTP server.
+2. **Receive updates.** In the app, create an `HMRClient` from `metro-runtime/modules/HMRClient`, register the loaded bundles, and call `enable()`. This is enough for manual boundaries:
 
    ```js
    const HMRClient = require('metro-runtime/modules/HMRClient');
@@ -81,31 +80,4 @@ React Native sets up Fast Refresh; see its [Fast Refresh docs](https://reactnati
    client.enable();
    ```
 
-   This is enough for manual boundaries.
-
-2. **Set up React Refresh**, for React Refresh boundaries:
-   - Apply the `react-refresh/babel` plugin, e.g. through the [Babel transformer](./Configuration.md#babeltransformerpath), so React Refresh can track components.
-   - Set `global.__ReactRefresh` (prefixed with [`transformer.globalPrefix`](./Configuration.md#globalprefix)) to the React Refresh runtime (`react-refresh/runtime`), with an added `performFullRefresh(reason)` method that reloads the app. In a browser, Metro reloads the page itself.
-
-## `module.hot`
-
-Available in development builds, for modules that handle updates themselves:
-
-- `module.hot.accept(callback?)`: Makes the current module a [manual boundary](#boundaries): when it or a module it imports changes, the update stops at this module. `callback` runs after the module re-runs.
-- `module.hot.dispose(callback?)`: `callback` runs before the current module re-runs, e.g. to undo side effects it had.
-
-Use them in a module that can safely re-run on its own:
-
-- With React Refresh, a module that isn't a component and has side effects it can undo and redo, such as starting a timer or registering handlers, routes or translations: `dispose` undoes them, and re-running the module redoes them with the new code. In a library, this only takes effect while the library's own files are edited, e.g. from its example app.
-- Without React Refresh, the root module, which renders the app again when it re-runs.
-
-For example, a module that polls a server:
-
-```js
-const interval = setInterval(poll, 1000);
-
-if (module.hot) {
-  module.hot.dispose(() => clearInterval(interval));
-  module.hot.accept();
-}
-```
+3. **Set up React Refresh**, for React Refresh boundaries. Apply the `react-refresh/babel` plugin, e.g. through the [Babel transformer](./Configuration.md#babeltransformerpath), and set `global.__ReactRefresh` (prefixed with [`transformer.globalPrefix`](./Configuration.md#globalprefix)) to the React Refresh runtime (`react-refresh/runtime`), with an added `performFullRefresh(reason)` method that reloads the app. In a browser, Metro reloads the page itself.

@@ -77,9 +77,7 @@ To combine your config with defaults or other configs, see [Merging Configuratio
 
 ### Partial and resolved configs
 
-What you write in `metro.config.js` is a _partial_ config (`MetroConfig`): only the options whose defaults you want to override — Metro's defaults, or React Native's via `getDefaultConfig` as above. [`loadConfig`](./API.md#loadconfigoptions-defaultconfigoverrides) merges it with those defaults into a _resolved_ config (`ConfigT`) with every option set.
-
-[`runServer`](./API.md#async-runserverconfig-options), [`runBuild`](./API.md#async-runbuildconfig-options) and [`createConnectMiddleware`](./API.md#createconnectmiddlewareconfig-options) take the resolved form; [`runMetro`](./API.md#async-runmetroconfig-options) and [`buildGraph`](./API.md#async-buildgraphconfig-options) take a partial config and merge defaults for you.
+`metro.config.js` exports a _partial_ config (`MetroConfig`) with only the options you change. [`loadConfig`](./API.md#loadconfigoptions-defaultconfigoverrides) merges it with the defaults into a _resolved_ config (`ConfigT`), which most [Bundling API](./API.md) functions take.
 
 ### General Options
 
@@ -556,7 +554,7 @@ When `"exports"` has no match, Metro logs a warning and resolves without it. Thi
 
 Type: `Array<RegExp>`
 
-Modules that trigger a full reload instead of a Fast Refresh update when changed, e.g. modules with side effects (such as style registration) that don't re-run correctly when hot reloaded. Patterns are tested against paths relative to [`projectRoot`](#projectroot), e.g. `[/\.css$/]`. Development bundles only. See [Fast Refresh](./FastRefresh.md#full-reloads). Defaults to `[]`.
+Modules that trigger a full reload instead of a Fast Refresh update when changed, e.g. modules with side effects (such as style registration) that don't re-run correctly when hot reloaded. Patterns are tested against paths relative to [`projectRoot`](#projectroot), e.g. `[/\.css$/]`. Development bundles only. See [Fast Refresh](./FastRefresh.md#when-state-is-kept-and-when-the-app-reloads). Defaults to `[]`.
 
 ---
 

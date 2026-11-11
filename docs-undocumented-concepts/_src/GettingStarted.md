@@ -71,4 +71,4 @@ See [Configuring Metro](./Configuration.md) for all configuration options, inclu
 
 ## Requesting bundles
 
-A running Metro server serves bundles, source maps and [assets](./Assets.md) over HTTP. In development, a React Native app loads its JavaScript by requesting a URL like `http://localhost:8081/index.bundle?platform=ios&dev=true`: the bundle built from `index.js`, for iOS, in development mode. See [Bundle URLs](./Bundling.md#bundle-urls) for all options, and how to request source maps.
+A running Metro server serves bundles, source maps and [assets](./Bundling.md#assets) over HTTP. In development, a React Native app loads its JavaScript by requesting a URL like `http://localhost:8081/index.bundle?platform=ios&dev=true`: the bundle built from `index.js`, for iOS, in development mode. See [Bundle URLs](./Bundling.md#bundle-urls) for all options, and how to request source maps.

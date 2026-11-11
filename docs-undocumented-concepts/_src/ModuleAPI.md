@@ -18,8 +18,6 @@ const {View} = require('react-native');
 
 The argument to `require()` must be a compile-time constant, such as a string literal, so that Metro knows at build time which modules to include. A non-constant argument, e.g. `require('./images/' + name + '.png')`, fails at build time, except in files inside `node_modules`, where the [`dynamicDepsInPackages`](./Configuration.md#dynamicdepsinpackages) config option controls whether it fails at build time or at runtime.
 
-By default, a `require()` inside a `try` block is optional: if Metro can't resolve it, the build succeeds and the `require()` throws at runtime instead. See [`allowOptionalDependencies`](./Configuration.md#allowoptionaldependencies).
-
 ### Advanced usage: `require` at runtime
 
 At build time, Metro [resolves](./Concepts.md#resolution) module names to absolute paths and [assigns an opaque module ID](./Configuration.md#createmoduleidfactory) to each one.
@@ -34,13 +32,57 @@ const dynamicRequire = require;
 dynamicRequire(id) === localModule; // true
 ```
 
+## `require.context()`
+
+Imports every file in a directory that matches a pattern, for example all route, story or translation files, without listing them one by one. It returns a function: call it with a key to get that file's module, and call its `keys()` method to list the keys.
+
+```js
+const routes = require.context('./routes', true, /\.js$/);
+
+for (const key of routes.keys()) {
+  // key is e.g. './settings/profile.js'
+  registerRoute(key, routes(key));
+}
+```
+
+The arguments are `require.context(directory, recursive, filter, mode)`:
+
+- `directory` (string): **Required.** The directory to import from, relative to the current file.
+- `recursive` (boolean): Include files in subdirectories. Defaults to `true`.
+- `filter` (RegExp): Only include files whose `./relative/path` matches. Defaults to all files.
+- `mode` (string): How each module is loaded. Defaults to `'sync'`:
+
+  | Mode          | `context(key)` returns           |
+  | ------------- | -------------------------------- |
+  | `'sync'`      | The module                       |
+  | `'eager'`     | A `Promise` for the module       |
+  | `'lazy'`      | A `Promise` (dynamic `import()`) |
+  | `'lazy-once'` | Same as `'lazy'` in Metro        |
+
+Like `require()`, every argument must be a compile-time constant, so Metro knows at build time which files to include. Adding or removing a matching file updates the context on the next build. If no file matches, `keys()` is empty and calling the context throws.
+
+`require.context()` is experimental and off by default. Enable it with [`transformer.unstable_allowRequireContext`](./Configuration.md#unstable_allowrequirecontext-experimental); without it, calling `require.context()` throws at runtime.
+
+## Optional dependencies
+
+A `require()` inside a `try` block is optional by default: if Metro can't resolve it, the build still succeeds, and the `require()` throws at runtime instead, for the `catch` block to handle. For example, to use a package only if it's installed:
+
+```js
+let Haptics = null;
+try {
+  Haptics = require('react-native-haptic-feedback');
+} catch {}
+```
+
+To make these failures fail the build instead, set [`transformer.allowOptionalDependencies`](./Configuration.md#allowoptionaldependencies).
+
 ## `module.exports`
 
 Similar to [`module.exports`](https://nodejs.org/api/modules.html#moduleexports) in Node: holds the value `require()` returns for the current module after it finishes evaluating.
 
 ## `module.hot`
 
-Available in [development builds](./Concepts.md#development-and-production-builds) only, for handling [Fast Refresh](./FastRefresh.md) updates manually. See [`module.hot`](./FastRefresh.md#modulehot).
+See [`module.hot`](./FastRefresh.md#modulehot) in Fast Refresh.
 
 ## ES Modules syntax (`import` and `export`)
 
@@ -69,101 +111,6 @@ In development with lazy bundling, each `import()` fetches its module from the M
 
 :::
 
-## `require.context()`
-
-Requires every file in a directory whose path matches a pattern, as in [webpack](https://webpack.js.org/guides/dependency-management/#requirecontext). Enable it with [`transformer.unstable_allowRequireContext`](./Configuration.md#unstable_allowrequirecontext-experimental).
-
-```js
-const context = require.context(directory, recursive, filter, mode);
-```
-
-The arguments must be compile-time constants:
-
-- `directory`: The directory to search, relative to the current file.
-- `recursive`: Whether to include subdirectories. Defaults to `true`.
-- `filter`: A regular expression literal tested against each file's path relative to `directory`, starting with `./`, e.g. `./screens/Home.js`. Defaults to `/.*/`.
-- `mode`: How matching modules are loaded. Defaults to `'sync'`.
-  - `'sync'`: `context(key)` returns the module's exports.
-  - `'eager'`: `context(key)` returns a promise of the module's exports. Every module is included in the bundle.
-  - `'lazy'`, `'lazy-once'`: `context(key)` returns a promise of the module's exports, loaded like [`import()`](#import-dynamic-import).
-
-`context.keys()` returns the matching paths, which are the keys `context` accepts. In development, adding or deleting a matching file updates the context. For example, to require every screen in `./screens`:
-
-```js
-const screens = require.context('./screens', false, /\.js$/);
-for (const key of screens.keys()) {
-  register(key, screens(key).default); // e.g. key = './Home.js'
-}
-```
-
 ## `require.resolveWeak()`
 
 Takes a module name (or path) and returns that module's opaque ID, without including it in the bundle. A specialised API for frameworks; application code rarely needs it. See [using `require` at runtime](#advanced-usage-require-at-runtime).
-
-## Require cycles
-
-A _require cycle_ is a chain of imports that loops back to a module that is still loading, such as `A` imports `B` and `B` imports `A`. Metro allows cycles. The module that closes the cycle receives the first module's exports as they are at that moment, which are often not set yet:
-
-```js
-// a.js
-const b = require('./b');
-exports.name = 'a';
-exports.b = b;
-
-// b.js
-const a = require('./a'); // a is still loading: a.name is not set yet
-module.exports = {getA: () => a};
-```
-
-Values read while the cycle is loading can therefore be `undefined`. Reading them later, inside a function such as `getA` above, sees the finished values — unless the module replaces `module.exports` wholesale, in which case the importer keeps the original empty object. In development, Metro warns when it detects a cycle:
-
-```text
-Require cycle: a.js -> b.js -> a.js
-
-Require cycles are allowed, but can result in uninitialized values. Consider refactoring to remove the need for a cycle.
-```
-
-Prefer removing the cycle, for example by moving the shared code into a third module both files import. For cycles you cannot remove, such as in third-party code, silence the warning with [`resolver.requireCycleIgnorePatterns`](./Configuration.md#requirecycleignorepatterns). Silencing the warning does not change the loading behaviour.
-
-## Inline requires
-
-With _inline requires_, Metro moves a top-level `require` to each place its result is used, so the required module loads at first use instead of when the importing file loads:
-
-```js
-// You write:
-const Foo = require('./Foo');
-function render() {
-  return Foo.render();
-}
-
-// The bundle contains the equivalent of:
-function render() {
-  return require('./Foo').render();
-}
-```
-
-This defers module initialization, and its side effects, until they are needed, which can make startup faster. It also means a module's top-level code may run later than its position in the import graph suggests, so do not rely on import order alone for side effects.
-
-Inline requires are controlled per bundle by [`transformer.getTransformOptions`](./Configuration.md#gettransformoptions) (`transform.inlineRequires`). Metro leaves them off by default; React Native turns them on.
-
-## Bundle globals
-
-Every bundle starts by defining these globals for your code. They are plain writable globals — later code, or another bundle in the same realm, can reassign them — but Metro sets them once at startup and does not expect them to change. Reassigning them can break the bundle: Metro's runtime reads them as it loads (for example, it captures `__METRO_GLOBAL_PREFIX__` to install `__r`/`__d`, and reads `__DEV__` throughout), so changed values leave code running against a mix of old and new ones.
-
-| Global                    | Value                                                                           |
-| ------------------------- | ------------------------------------------------------------------------------- |
-| `__DEV__`                 | `true` in development bundles, `false` otherwise                                |
-| `process.env.NODE_ENV`    | `'development'` or `'production'`, matching `__DEV__`                           |
-| `__BUNDLE_START_TIME__`   | When the bundle started running, for startup timing                             |
-| `__METRO_GLOBAL_PREFIX__` | The bundle's [`globalPrefix`](./Configuration.md#globalprefix), `''` by default |
-
-In production builds, Metro's default transformer replaces `__DEV__` with `false` and `process.env.NODE_ENV` with `'production'`, then removes code these replacements make unreachable, so reassigning them at runtime has no effect there. In every build, it also replaces React Native's `Platform.OS` and `Platform.select()` with the bundle's [platform](./Concepts.md#platform). For example, in a production iOS bundle:
-
-```js
-if (__DEV__) {
-  console.log('debug info'); // removed
-}
-const padding = Platform.select({ios: 12, android: 8}); // becomes `12`
-```
-
-See [Bundling](./Bundling.md#modules) for what else runs before your code.

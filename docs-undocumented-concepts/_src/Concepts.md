@@ -37,13 +37,11 @@ The module a bundle is built from. Metro follows its dependencies recursively to
 
 ### Asset
 
-A file, such as an image or a font, that's required like a JavaScript module, e.g. `require('./logo.png')`. Metro treats files whose extensions are in [`resolver.assetExts`](./Configuration.md#assetexts) as assets, serves them from the development server, and lists them for build tools to copy into the app, e.g. with [`runBuild`](./API.md#async-runbuildconfig-options)'s `assets` option. See [Assets](./Assets.md).
+A file, such as an image or a font, that's required like a JavaScript module, e.g. `require('./logo.png')`. See [Assets](./Bundling.md#assets).
 
 ### Dependency graph
 
 All modules reachable from an entry point, and the dependencies between them. During development, Metro keeps this graph in memory and updates it incrementally when [files change](#file-watching), instead of rebuilding the whole bundle.
-
-The first request for a bundle builds its graph. Later requests only rebuild what was added, changed or deleted since — an _incremental rebuild_ — which is why they are fast. Each distinct bundle (different entry point, platform or `dev` setting, for example) has its own graph, and restarting Metro discards them all. See [Development server URLs](./API.md#development-server-urls).
 
 ### Platform
 
@@ -51,7 +49,7 @@ The platform a bundle is built for, e.g. `ios` or `android`. Metro uses it to pi
 
 ### Development and production builds
 
-Every bundle is built either for development or production, set by the `dev` option, e.g. `dev=true` in a [bundle URL](./Bundling.md#bundle-urls) or `--dev` for [`metro build`](./CLI.md#build-entry). Development builds support [Fast Refresh](#fast-refresh) and warn about require cycles at runtime. Production builds replace `__DEV__` and other build constants with their values, drop the code that makes unreachable, and are usually minified with [`transformer.minifierPath`](./Configuration.md#minifierpath). See [Bundle globals](./ModuleAPI.md#bundle-globals).
+Every bundle is built either for development or production, set by the `dev` option, e.g. `dev=true` in a [bundle URL](./Bundling.md#bundle-urls) or `--dev` for [`metro build`](./CLI.md#build-entry). Development builds support [Fast Refresh](#fast-refresh) and warn about require cycles at runtime. Production builds replace `__DEV__` and other build constants with their values, drop the code that makes unreachable, and are usually minified with [`transformer.minifierPath`](./Configuration.md#minifierpath). See [Bundle globals](./Bundling.md#bundle-globals).
 
 ### Project root and watch folders
 
@@ -66,10 +64,6 @@ Watching is on unless the [JavaScript API](./API.md)'s `watch` option or the `CI
 ### Fast Refresh
 
 Applying an edit to a running development app without restarting it, keeping its state when the change allows. Metro sends the changed modules to the app, which applies them in place or falls back to a full reload. See [Fast Refresh](./FastRefresh.md).
-
-### Inline requires
-
-Moving a top-level `require` to the places its result is used, so the required module initializes at first use instead of at import time. Controlled per bundle; React Native enables it by default. See [Inline requires](./ModuleAPI.md#inline-requires).
 
 ### Hermes
 

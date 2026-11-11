@@ -94,6 +94,102 @@ For example, React Native's [`console.js`](https://github.com/facebook/react-nat
 })(globalThis);
 ```
 
+## Bundle globals
+
+Every bundle starts by defining these globals for your code. They are plain writable globals — later code, or another bundle in the same realm, can reassign them — but Metro sets them once at startup and does not expect them to change. Reassigning them can break the bundle: Metro's runtime reads them as it loads (for example, it captures `__METRO_GLOBAL_PREFIX__` to install `__r`/`__d`, and reads `__DEV__` throughout), so changed values leave code running against a mix of old and new ones.
+
+| Global                    | Value                                                                           |
+| ------------------------- | ------------------------------------------------------------------------------- |
+| `__DEV__`                 | `true` in development bundles, `false` otherwise                                |
+| `process.env.NODE_ENV`    | `'development'` or `'production'`, matching `__DEV__`                           |
+| `__BUNDLE_START_TIME__`   | When the bundle started running, for startup timing                             |
+| `__METRO_GLOBAL_PREFIX__` | The bundle's [`globalPrefix`](./Configuration.md#globalprefix), `''` by default |
+
+In production builds, Metro's default transformer replaces `__DEV__` with `false` and `process.env.NODE_ENV` with `'production'`, then removes code these replacements make unreachable, so reassigning them at runtime has no effect there. In every build, it also replaces React Native's `Platform.OS` and `Platform.select()` with the bundle's [platform](./Concepts.md#platform). For example, in a production iOS bundle:
+
+```js
+if (__DEV__) {
+  console.log('debug info'); // removed
+}
+const padding = Platform.select({ios: 12, android: 8}); // becomes `12`
+```
+
+See [Modules](#modules) for what else runs before your code.
+
+## Require cycles
+
+A _require cycle_ is a chain of imports that loops back to a module that is still loading, such as `A` imports `B` and `B` imports `A`. Metro allows cycles. The module that closes the cycle receives the first module's exports as they are at that moment, which are often not set yet:
+
+```js
+// a.js
+const b = require('./b');
+exports.name = 'a';
+exports.b = b;
+
+// b.js
+const a = require('./a'); // a is still loading: a.name is not set yet
+module.exports = {getA: () => a};
+```
+
+Values read while the cycle is loading can therefore be `undefined`. Reading them later, inside a function such as `getA` above, sees the finished values — unless the module replaces `module.exports` wholesale, in which case the importer keeps the original empty object. In development, Metro warns when it detects a cycle:
+
+```text
+Require cycle: a.js -> b.js -> a.js
+
+Require cycles are allowed, but can result in uninitialized values. Consider refactoring to remove the need for a cycle.
+```
+
+Prefer removing the cycle, for example by moving the shared code into a third module both files import. For cycles you cannot remove, such as in third-party code, silence the warning with [`resolver.requireCycleIgnorePatterns`](./Configuration.md#requirecycleignorepatterns). Silencing the warning does not change the loading behaviour.
+
+## Inline requires
+
+With _inline requires_, Metro moves a top-level `require` to each place its result is used, so the required module loads at first use instead of when the importing file loads:
+
+```js
+// You write:
+const Foo = require('./Foo');
+function render() {
+  return Foo.render();
+}
+
+// The bundle contains the equivalent of:
+function render() {
+  return require('./Foo').render();
+}
+```
+
+This defers module initialization, and its side effects, until they are needed, which can make startup faster. It also means a module's top-level code may run later than its position in the import graph suggests, so do not rely on import order alone for side effects.
+
+Inline requires are controlled per bundle by [`transformer.getTransformOptions`](./Configuration.md#gettransformoptions) (`transform.inlineRequires`). Metro leaves them off by default; React Native turns them on.
+
+## Assets
+
+An _asset_ is a file, such as an image or a font, that your code requires like a JavaScript module:
+
+```js
+const logo = require('./logo.png');
+```
+
+Metro treats a file as an asset if its extension is listed in [`resolver.assetExts`](./Configuration.md#assetexts), which by default includes common image, video and audio formats.
+
+### Variants
+
+An asset can have variants for a specific [platform](./Concepts.md#platform) (dotted suffix, e.g. `.ios`) or, for images, screen density (`@` suffix, e.g. `@2x`, see [`resolver.assetResolutions`](./Configuration.md#assetresolutions)). For example, `logo@2x.ios.png` is the 2x iOS variant of `logo.png`.
+
+`require('./logo.png')` refers to all of them: Metro picks the files for the bundle's platform, and includes every density, e.g. `logo.png`, `logo@2x.png` and `logo@3x.png`, so the app can load the best one for the screen.
+
+### In the bundle
+
+An asset is a [module](./Concepts.md#module) that passes a description of the asset (name, type, dimensions, available densities, and URL path on the server) to `registerAsset()` of the [`transformer.assetRegistryPath`](./Configuration.md#assetregistrypath) module, and exports the result. In React Native, `require` therefore returns a numeric ID that components such as `<Image>` accept.
+
+To change the description, e.g. to add data computed from the file, use [`transformer.assetPlugins`](./Configuration.md#assetplugins).
+
+### Serving and copying assets
+
+The development server serves asset files, generally as-is, under `/assets/` (see [`transformer.publicPath`](./Configuration.md#publicpath)), e.g. `/assets/src/logo@2x.png?platform=ios` for `src/logo@2x.png`.
+
+Release builds load assets from the app instead. [`runBuild`](./API.md#async-runbuildconfig-options) with `assets: true` returns the bundle's assets and their files, for build tools to copy into the app. React Native's `bundle` command does this with `--assets-dest`.
+
 ## Bundle formats
 
 You only need the formats below if you work with Metro's output directly, e.g. in a tool or native loader that reads bundles. Metro can write two kinds of bundles:

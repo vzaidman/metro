@@ -14,7 +14,7 @@ Metro is published as a set of npm packages. Most run in Node.js while bundling;
 | `metro-runtime`     | The only package whose code runs in your app: the module system behind `require`, dynamic `import()` loading, and the [Fast Refresh](./FastRefresh.md) client. It has no main entry point; Metro includes its modules in your bundle for you |
 | `metro-symbolicate` | Standalone command that symbolicates release stack traces and profiles. See [Symbolicating Stack Traces](./Symbolication.md)                                                                                                                 |
 
-Everything except `metro-runtime` runs at build time in Node.js. Errors from build-time packages appear in Metro's terminal output; `metro-runtime` behaviour, such as [require cycles](./ModuleAPI.md#require-cycles), appears in your app.
+Everything except `metro-runtime` runs at build time in Node.js. Errors from build-time packages appear in Metro's terminal output; `metro-runtime` behaviour, such as [require cycles](./Bundling.md#require-cycles), appears in your app.
 
 ## Packages behind config options
 
@@ -31,7 +31,7 @@ You meet these through [configuration](./Configuration.md) rather than by import
 
 Four more packages matter when you write custom tooling or debug a build:
 
-- `metro-transform-plugins`: Metro's own Babel passes, applied on top of your Babel config. They implement import/export conversion, [inline requires](./ModuleAPI.md#inline-requires), `__DEV__` and platform inlining, and constant folding. That is why bundled code can differ from running your Babel config alone.
+- `metro-transform-plugins`: Metro's own Babel passes, applied on top of your Babel config. They implement import/export conversion, [inline requires](./Bundling.md#inline-requires), `__DEV__` and platform inlining, and constant folding. That is why bundled code can differ from running your Babel config alone.
 - `metro-cache-key`: Computes a cache key from file contents. If you write a custom transformer, its `getCacheKey` must cover every file that affects its output, or Metro reuses stale results (see [Stale bundle](./Troubleshooting.md#stale-bundle)).
 - `metro-source-map`: Builds and reads Metro's source maps. Tool authors should see [Source Map Format](./SourceMapFormat.md); app developers can skip it.
 - `metro-file-map`: Crawls and watches `projectRoot` and `watchFolders`, which is why files outside them are invisible. Its API is experimental and changes are not treated as breaking; configure it through Metro options instead of depending on it directly.
