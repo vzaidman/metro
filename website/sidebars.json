@@ -2,8 +2,16 @@
   "docs": {
     "Introduction": ["getting-started", "concepts"],
     "API Reference": ["api", "module-api", "configuration", "cli"],
-    "Guides": ["package-exports", "troubleshooting"],
+    "Guides": ["monorepos", "package-exports", "troubleshooting"],
     "Contributing": ["local-development"],
-    "Deep Dives": ["bundling", "caching", "resolution", "source-map-format"]
+    "Deep Dives": [
+      "bundling",
+      "caching",
+      "fast-refresh",
+      "packages",
+      "resolution",
+      "source-map-format",
+      "symbolication"
+    ]
   }
 }

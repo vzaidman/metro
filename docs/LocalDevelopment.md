@@ -3,7 +3,41 @@ id: local-development
 title: Local Development Setup
 ---
 
-This page is for contributors to Metro itself.
+This page is for contributors to Metro itself. See also the [contributing guide](https://github.com/react/metro/blob/main/CONTRIBUTING.md).
+
+## Repository Structure
+
+Metro is a monorepo of npm packages under `packages/`, written in [Flow](https://flow.org/):
+
+| Package                          | Responsibility                                                                                                                                                                                 |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `metro`                          | The bundler: [CLI](./CLI.md), [JavaScript API](./API.md), development server, [dependency graph](./Concepts.md#dependency-graph), serializers, and the [Fast Refresh](./FastRefresh.md) server |
+| `metro-config`                   | Loading, validating and [merging](./Configuration.md#merging-configurations) configuration, and its defaults                                                                                   |
+| `metro-file-map`                 | Crawling and [watching](./Concepts.md#file-watching) the project's files, and the [Haste](./Concepts.md#haste) map                                                                             |
+| `metro-resolver`                 | [Module resolution](./Resolution.md)                                                                                                                                                           |
+| `metro-transform-worker`         | The default [transformer](./Concepts.md#transformation), run in worker processes                                                                                                               |
+| `metro-babel-transformer`        | The base [Babel transformer](./Configuration.md#babeltransformerpath)                                                                                                                          |
+| `metro-transform-plugins`        | Babel plugins used by the transformer, e.g. for inlining build constants, constant folding and inline requires                                                                                 |
+| `metro-runtime`                  | Code that runs in the app: the module system (`__d`, `__r`), the Fast Refresh client and `asyncRequire`                                                                                        |
+| `metro-source-map`               | Source map generation and composition, including [Metro's extensions](./SourceMapFormat.md)                                                                                                    |
+| `metro-symbolicate`              | Mapping stack traces back to source files with source maps                                                                                                                                     |
+| `metro-cache`, `metro-cache-key` | [Cache stores](./Caching.md#built-in-cache-stores) and cache key hashing                                                                                                                       |
+| `metro-minify-terser`            | The default [minifier](./Configuration.md#minifierpath)                                                                                                                                        |
+| `metro-core`                     | Shared utilities, such as terminal output and logging                                                                                                                                          |
+| `metro-babel-register`           | Running Metro's Flow source with Babel, without building it                                                                                                                                    |
+| `ob1`, `buck-worker-tool`        | Type-checked 0- and 1-based offsets, and the Buck worker protocol                                                                                                                              |
+
+Packages under `private/`, such as `metro-memory-fs`, are only used by Metro's own tests.
+
+## Running Checks
+
+`yarn test` runs type checking, linting, formatting checks, the build and all Jest tests. While iterating, run a subset, e.g. `yarn typecheck` (Flow) or `yarn jest packages/metro-resolver`.
+
+## Public API
+
+A package's public API is what its `package.json` `"exports"` expose, except `private/*` subpaths (e.g. `metro/private/DeltaBundler`), which expose internals that may change in any release.
+
+Packages commit a snapshot of their public API, generated from their Flow source, in `API.md` (or `API-*.md`, one per entry point). After changing a public API, regenerate them with `yarn build-api-snapshots`. Jest fails if the snapshots are stale, so API changes show up in review.
 
 ## Testing Metro Changes inside a React Native Project
 

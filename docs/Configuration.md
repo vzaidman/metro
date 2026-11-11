@@ -75,6 +75,10 @@ export default config;
 
 To combine your config with defaults or other configs, see [Merging Configurations](#merging-configurations).
 
+### Partial and resolved configs
+
+`metro.config.js` exports a _partial_ config (`MetroConfig`) with only the options you change. [`loadConfig`](./API.md#loadconfigoptions-defaultconfigoverrides) merges it with the defaults into a _resolved_ config (`ConfigT`), which most [Bundling API](./API.md) functions take.
+
 ### General Options
 
 Top-level options for caching, which files Metro can see, and parallelism.
@@ -303,7 +307,7 @@ The module used when Metro needs an empty module, e.g. when a package's `browser
 
 Type: `boolean`
 
-Whether to automatically resolve first-party packages (e.g. workspaces): any `package.json` with a valid `name` within `projectRoot` or `watchFolders`, outside `node_modules`. Defaults to `false`. For example, if `packages/ui/package.json` has `"name": "@acme/ui"`, `import Button from '@acme/ui/Button'` resolves into `packages/ui` without `@acme/ui` in `node_modules`.
+Whether to automatically resolve first-party packages (e.g. workspaces): any `package.json` with a valid `name` within `projectRoot` or `watchFolders`, outside `node_modules`. Defaults to `false`. For example, if `packages/ui/package.json` has `"name": "ui"`, `import Button from 'ui/Button'` resolves into `packages/ui` without `ui` in `node_modules`.
 
 #### `extraNodeModules`
 
@@ -367,7 +371,7 @@ Schemes are lowercased before lookup, so keys must be lowercase; `Foo:` and `foo
 
 Type: `boolean`
 
-If `false`, Metro doesn't use [Watchman](https://facebook.github.io/watchman/) (even if installed) to crawl and [watch](./Concepts.md#file-watching) files. Defaults to `true`.
+Use [Watchman](https://facebook.github.io/watchman/), if installed, to crawl and [watch](./Concepts.md#file-watching) files. If `false` don't use Watchman. Without Watchman, Metro falls back to native file system events on macOS, or a Node.js-based watcher elsewhere. Defaults to `true`.
 
 #### `blockList`
 
@@ -550,7 +554,7 @@ When `"exports"` has no match, Metro logs a warning and resolves without it. Thi
 
 Type: `Array<RegExp>`
 
-Modules that trigger a full reload instead of a Fast Refresh update when changed, e.g. modules with side effects (such as style registration) that don't re-run correctly when hot reloaded. Patterns are tested against paths relative to [`projectRoot`](#projectroot), e.g. `[/\.css$/]`. Development bundles only. Defaults to `[]`.
+Modules that trigger a full reload instead of a Fast Refresh update when changed, e.g. modules with side effects (such as style registration) that don't re-run correctly when hot reloaded. Patterns are tested against paths relative to [`projectRoot`](#projectroot), e.g. `[/\.css$/]`. Development bundles only. See [Fast Refresh](./FastRefresh.md#when-state-is-kept-and-when-the-app-reloads). Defaults to `[]`.
 
 ---
 
@@ -680,7 +684,7 @@ The URL path prefix written into each asset's `httpServerLocation`, which the ap
 
 Type: `boolean`
 
-Enables `require.context()`, which imports all the files in a directory that match a pattern. Defaults to `false`.
+Enables `require.context()`, which imports all the files in a directory that match a pattern. See [`require.context()`](./ModuleAPI.md#requirecontext). Defaults to `false`.
 
 #### `unstable_workerThreads` <div class="label experimental">Experimental</div>
 
@@ -710,13 +714,15 @@ These options configure the Babel-based compilation done by Metro's default tran
 
 Type: `string`
 
-A module that compiles code with Babel, returning an AST and optional metadata. Defaults to `metro-babel-transformer`. To implement a custom one, see the source of [`metro-babel-transformer`](https://github.com/react/metro/blob/main/packages/metro-babel-transformer/src/index.js) and [`@react-native/metro-babel-transformer`](https://github.com/facebook/react-native/blob/main/packages/react-native-babel-transformer/src/index.js).
+A module that compiles code with Babel, returning an AST and optional metadata. Defaults to `metro-babel-transformer`.
 
 :::note
 
 When using React Native, `babelTransformerPath` defaults to `@react-native/metro-babel-transformer`.
 
 :::
+
+See [Writing a custom transformer](#writing-a-custom-transformer).
 
 #### `enableBabelRCLookup`
 
@@ -745,6 +751,21 @@ Only works under React Native's default settings. May have no effect with a cust
 Type: `boolean`
 
 Whether to parse JavaScript with [`flow-parser`](https://www.npmjs.com/package/flow-parser) instead of Babel. Only has an effect with the [Babel transformers](#babeltransformerpath) built into Metro; custom ones may ignore it. Defaults to `false`.
+
+#### Writing a custom transformer
+
+Most projects use the default transformer. Write your own only for compilation the default Babel setup cannot do. [`babelTransformerPath`](#babeltransformerpath) replaces just the Babel step, which covers almost every case; [`transformerPath`](#transformerpath) replaces the whole per-file pipeline and is rarely needed.
+
+A Babel transformer exports `transform({filename, src, options, plugins})` and returns `{ast, metadata?}`. Apply the `plugins` Metro passes and return the resulting `metadata`, which Metro uses for function names in stack traces. Respect the Babel options and caller data Metro passes through config. The optional `getCacheKey(...)` must change whenever anything your transform reads changes, such as its Babel config, or Metro reuses stale results (see [Caching](./Caching.md)):
+
+```js
+const {transformSync} = require('@babel/core');
+
+module.exports.transform = ({filename, src, plugins}) =>
+  transformSync(src, {ast: true, filename, plugins});
+```
+
+For complete implementations, see [`metro-babel-transformer`](https://github.com/react/metro/blob/main/packages/metro-babel-transformer/src/index.js) and [`@react-native/metro-babel-transformer`](https://github.com/facebook/react-native/blob/main/packages/react-native-babel-transformer/src/index.js). For a whole-pipeline transformer, see [`metro-transform-worker`](https://github.com/react/metro/blob/main/packages/metro-transform-worker/src/index.js).
 
 ---
 
@@ -944,7 +965,7 @@ When merging configs, an object `tls` extends the base `tls` config, `false` ove
 
 ### Symbolicator Options
 
-Symbolication maps bundle stack frames back to original source files and lines. These options customize stack traces symbolicated by Metro's `/symbolicate` endpoint, which React Native uses to display JavaScript errors in development.
+Symbolication maps bundle stack frames back to original source files and lines. These options customize stack traces symbolicated by Metro's `/symbolicate` endpoint, which React Native uses to display JavaScript errors in development. To symbolicate release crashes and profiles yourself, see [Symbolicating Stack Traces](./Symbolication.md).
 
 #### `customizeFrame`
 

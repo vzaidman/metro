@@ -9,7 +9,7 @@ _Bundling_ turns your app's source files into a _bundle_: the JavaScript your ap
 
 You can get a bundle from Metro:
 
-- **From the development server**, by requesting the entry point's path with `.bundle` instead of `.js`, e.g. `http://localhost:8081/index.bundle?platform=ios`. This is how React Native apps load their code in development. See [URL and bundle request](./GettingStarted.md#url-and-bundle-request).
+- **From the development server**, by requesting the entry point's path with `.bundle` instead of `.js`, e.g. `http://localhost:8081/index.bundle?platform=ios`. This is how React Native apps load their code in development. See [Bundle URLs](#bundle-urls).
 - **As build output**, with `npx react-native bundle` for React Native release builds, [`metro build`](./CLI.md#build-entry), or [`runBuild`](./API.md#async-runbuildconfig-options).
 
 To build a bundle, Metro:
@@ -21,6 +21,31 @@ To build a bundle, Metro:
    - [Scripts](#scripts): Metro's module system and polyfills.
    - Each [module](#modules), wrapped in a `__d` call.
    - Calls that run the modules from [`serializer.getModulesRunBeforeMainModule`](./Configuration.md#getmodulesrunbeforemainmodule), then the entry point.
+
+## Bundle URLs
+
+Any JS file in the [project root](./Concepts.md#project-root-and-watch-folders) can be the [entry point](./Concepts.md#entry-point) of a bundle served by the development server. To request a bundle, use the file's path relative to the project root (or [`server.unstable_serverRoot`](./Configuration.md#unstable_serverroot-experimental), if set), with `.js` changed to `.bundle`.
+
+Pass build options as query parameters. All are optional. Boolean ones take `true` or `false` and default to `false` unless noted. `dev`, `platform` and `minify` correspond to the bundle's settings of the same name.
+
+- `dev`: Build a [development bundle](./Concepts.md#development-and-production-builds). Defaults to `true`.
+- `platform`: The [platform](./Concepts.md#platform) requesting the bundle (e.g. `ios`). Defaults to the platform suffix of the requested file name, if any (e.g. `ios` for `index.ios.bundle`).
+- `minify`: Minify the code.
+- `excludeSource`: Leave the source code out of the source map, e.g. `/index.map?platform=ios&dev=true&excludeSource=true` returns a source map without `sourcesContent`.
+- `inlineSourceMap`: Append the source map to the bundle as a base64 `data:` URL.
+- `lazy`: Leave modules loaded with [`import()`](./ModuleAPI.md#import-dynamic-import) out of the bundle and load them on demand.
+- `modulesOnly`: Leave out Metro's runtime and polyfills, serving only the modules.
+- `runModule`: End the bundle with the statements that run the entry point. Defaults to `true`.
+- `shallow`: Include only the entry module, without its dependencies.
+- `sourcePaths`: Reference source files in the source map as absolute file paths (`absolute`) or URL paths on the server (`url-server`). Defaults to `absolute`.
+- `unstable_transformProfile`: Passed to the [Babel transformer](./Configuration.md#babeltransformerpath) to target a specific JavaScript engine (`default`, `hermes-stable` or `hermes-canary`). Defaults to `default`.
+- `resolver.<key>` and `transform.<key>`: [Custom resolver options](./Resolution.md#customresolveroptions-string-mixed) and custom transform options, e.g. `transform.foo=bar` passes `{foo: 'bar'}` to the transformer.
+
+For example, `http://localhost:8081/foo/bar/baz.bundle?dev=true&platform=ios` builds a development bundle for iOS from `foo/bar/baz.js`.
+
+### Source maps
+
+Metro builds a source map for each bundle. To request it, use the bundle's URL with `.map` instead of `.bundle` and the same query parameters, or the source map won't match the bundle. For example, the source map of `http://localhost:8081/index.bundle?platform=ios&dev=true` is `http://localhost:8081/index.map?platform=ios&dev=true`, which the bundle references with a `//# sourceMappingURL=` comment. This only works when `inlineSourceMap` is `false`. See [Source Map Format](./SourceMapFormat.md) for Metro's extensions to the format.
 
 ## Modules
 
@@ -68,6 +93,102 @@ For example, React Native's [`console.js`](https://github.com/facebook/react-nat
   }
 })(globalThis);
 ```
+
+## Bundle globals
+
+Every bundle starts by defining these globals for your code. They are plain writable globals — later code, or another bundle in the same realm, can reassign them — but Metro sets them once at startup and does not expect them to change. Reassigning them can break the bundle: Metro's runtime reads them as it loads (for example, it captures `__METRO_GLOBAL_PREFIX__` to install `__r`/`__d`, and reads `__DEV__` throughout), so changed values leave code running against a mix of old and new ones.
+
+| Global                    | Value                                                                           |
+| ------------------------- | ------------------------------------------------------------------------------- |
+| `__DEV__`                 | `true` in development bundles, `false` otherwise                                |
+| `process.env.NODE_ENV`    | `'development'` or `'production'`, matching `__DEV__`                           |
+| `__BUNDLE_START_TIME__`   | When the bundle started running, for startup timing                             |
+| `__METRO_GLOBAL_PREFIX__` | The bundle's [`globalPrefix`](./Configuration.md#globalprefix), `''` by default |
+
+In production builds, Metro's default transformer replaces `__DEV__` with `false` and `process.env.NODE_ENV` with `'production'`, then removes code these replacements make unreachable, so reassigning them at runtime has no effect there. In every build, it also replaces React Native's `Platform.OS` and `Platform.select()` with the bundle's [platform](./Concepts.md#platform). For example, in a production iOS bundle:
+
+```js
+if (__DEV__) {
+  console.log('debug info'); // removed
+}
+const padding = Platform.select({ios: 12, android: 8}); // becomes `12`
+```
+
+See [Modules](#modules) for what else runs before your code.
+
+## Require cycles
+
+A _require cycle_ is a chain of imports that loops back to a module that is still loading, such as `A` imports `B` and `B` imports `A`. Metro allows cycles. The module that closes the cycle receives the first module's exports as they are at that moment, which are often not set yet:
+
+```js
+// a.js
+const b = require('./b');
+exports.name = 'a';
+exports.b = b;
+
+// b.js
+const a = require('./a'); // a is still loading: a.name is not set yet
+module.exports = {getA: () => a};
+```
+
+Values read while the cycle is loading can therefore be `undefined`. Reading them later, inside a function such as `getA` above, sees the finished values — unless the module replaces `module.exports` wholesale, in which case the importer keeps the original empty object. In development, Metro warns when it detects a cycle:
+
+```text
+Require cycle: a.js -> b.js -> a.js
+
+Require cycles are allowed, but can result in uninitialized values. Consider refactoring to remove the need for a cycle.
+```
+
+Prefer removing the cycle, for example by moving the shared code into a third module both files import. For cycles you cannot remove, such as in third-party code, silence the warning with [`resolver.requireCycleIgnorePatterns`](./Configuration.md#requirecycleignorepatterns). Silencing the warning does not change the loading behaviour.
+
+## Inline requires
+
+With _inline requires_, Metro moves a top-level `require` to each place its result is used, so the required module loads at first use instead of when the importing file loads:
+
+```js
+// You write:
+const Foo = require('./Foo');
+function render() {
+  return Foo.render();
+}
+
+// The bundle contains the equivalent of:
+function render() {
+  return require('./Foo').render();
+}
+```
+
+This defers module initialization, and its side effects, until they are needed, which can make startup faster. It also means a module's top-level code may run later than its position in the import graph suggests, so do not rely on import order alone for side effects.
+
+Inline requires are controlled per bundle by [`transformer.getTransformOptions`](./Configuration.md#gettransformoptions) (`transform.inlineRequires`). Metro leaves them off by default; React Native turns them on.
+
+## Assets
+
+An _asset_ is a file, such as an image or a font, that your code requires like a JavaScript module:
+
+```js
+const logo = require('./logo.png');
+```
+
+Metro treats a file as an asset if its extension is listed in [`resolver.assetExts`](./Configuration.md#assetexts), which by default includes common image, video and audio formats.
+
+### Variants
+
+An asset can have variants for a specific [platform](./Concepts.md#platform) (dotted suffix, e.g. `.ios`) or, for images, screen density (`@` suffix, e.g. `@2x`, see [`resolver.assetResolutions`](./Configuration.md#assetresolutions)). For example, `logo@2x.ios.png` is the 2x iOS variant of `logo.png`.
+
+`require('./logo.png')` refers to all of them: Metro picks the files for the bundle's platform, and includes every density, e.g. `logo.png`, `logo@2x.png` and `logo@3x.png`, so the app can load the best one for the screen.
+
+### In the bundle
+
+An asset is a [module](./Concepts.md#module) that passes a description of the asset (name, type, dimensions, available densities, and URL path on the server) to `registerAsset()` of the [`transformer.assetRegistryPath`](./Configuration.md#assetregistrypath) module, and exports the result. In React Native, `require` therefore returns a numeric ID that components such as `<Image>` accept.
+
+To change the description, e.g. to add data computed from the file, use [`transformer.assetPlugins`](./Configuration.md#assetplugins).
+
+### Serving and copying assets
+
+The development server serves asset files, generally as-is, under `/assets/` (see [`transformer.publicPath`](./Configuration.md#publicpath)), e.g. `/assets/src/logo@2x.png?platform=ios` for `src/logo@2x.png`.
+
+Release builds load assets from the app instead. [`runBuild`](./API.md#async-runbuildconfig-options) with `assets: true` returns the bundle's assets and their files, for build tools to copy into the app. React Native's `bundle` command does this with `--assets-dest`.
 
 ## Bundle formats
 

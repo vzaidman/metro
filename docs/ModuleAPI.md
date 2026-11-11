@@ -32,9 +32,57 @@ const dynamicRequire = require;
 dynamicRequire(id) === localModule; // true
 ```
 
+## `require.context()`
+
+Imports every file in a directory that matches a pattern, for example all route, story or translation files, without listing them one by one. It returns a function: call it with a key to get that file's module, and call its `keys()` method to list the keys.
+
+```js
+const routes = require.context('./routes', true, /\.js$/);
+
+for (const key of routes.keys()) {
+  // key is e.g. './settings/profile.js'
+  registerRoute(key, routes(key));
+}
+```
+
+The arguments are `require.context(directory, recursive, filter, mode)`:
+
+- `directory` (string): **Required.** The directory to import from, relative to the current file.
+- `recursive` (boolean): Include files in subdirectories. Defaults to `true`.
+- `filter` (RegExp): Only include files whose `./relative/path` matches. Defaults to all files.
+- `mode` (string): How each module is loaded. Defaults to `'sync'`:
+
+  | Mode          | `context(key)` returns           |
+  | ------------- | -------------------------------- |
+  | `'sync'`      | The module                       |
+  | `'eager'`     | A `Promise` for the module       |
+  | `'lazy'`      | A `Promise` (dynamic `import()`) |
+  | `'lazy-once'` | Same as `'lazy'` in Metro        |
+
+Like `require()`, every argument must be a compile-time constant, so Metro knows at build time which files to include. Adding or removing a matching file updates the context on the next build. If no file matches, `keys()` is empty and calling the context throws.
+
+`require.context()` is experimental and off by default. Enable it with [`transformer.unstable_allowRequireContext`](./Configuration.md#unstable_allowrequirecontext-experimental); without it, calling `require.context()` throws at runtime.
+
+## Optional dependencies
+
+A `require()` inside a `try` block is optional by default: if Metro can't resolve it, the build still succeeds, and the `require()` throws at runtime instead, for the `catch` block to handle. For example, to use a package only if it's installed:
+
+```js
+let Haptics = null;
+try {
+  Haptics = require('react-native-haptic-feedback');
+} catch {}
+```
+
+To make these failures fail the build instead, set [`transformer.allowOptionalDependencies`](./Configuration.md#allowoptionaldependencies).
+
 ## `module.exports`
 
 Similar to [`module.exports`](https://nodejs.org/api/modules.html#moduleexports) in Node: holds the value `require()` returns for the current module after it finishes evaluating.
+
+## `module.hot`
+
+See [`module.hot`](./FastRefresh.md#modulehot) in Fast Refresh.
 
 ## ES Modules syntax (`import` and `export`)
 
@@ -49,6 +97,8 @@ In React Native projects that use `@react-native/babel-preset`, `import` and `ex
 ## `import()` (dynamic import)
 
 [`import()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import) calls are supported out of the box. In React Native, using `import()` automatically splits your application code so that it loads faster during development, without affecting release builds.
+
+In development with lazy bundling, each `import()` fetches its module from the Metro server the first time it runs, so you will see extra bundle requests in network logs. Release builds include the module in the single bundle by default, and the same `import()` resolves without a network request. If `import()` fails at runtime with an error about `__loadBundleAsync`, the framework loading the bundle has enabled lazy bundling without providing that function; see below.
 
 :::info
 

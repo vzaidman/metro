@@ -38,7 +38,7 @@ The core team will be monitoring for pull requests. When we get one, we'll run s
 4. If you've added code that should be tested, add tests.
 5. If you've changed APIs:
     1. Update the documentation if necessary.
-    2. Update any relevant `.d.ts` files under the package's `types/` directory.
+    2. Regenerate the public API snapshots with `yarn build-api-snapshots`.
 6. Format the repository with `yarn format`.
 7. Ensure the test suite passes via `yarn test`.
 8. If you haven't already, complete the CLA.
